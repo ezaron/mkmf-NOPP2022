@@ -1,7 +1,9 @@
 # Template for the GNU Compiler Collection on Trusty version of Ubuntu Linux systems (used by Travis-CI)
 #
 # Typical use with mkmf
-# mkmf -t linux-ubuntu-trusty-gnu.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
+# mkmf -t linux-ubuntu-xenial-gnu.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
+#
+# Designed to work on Ubuntu-16
 
 ############
 # Commands Macors
@@ -54,8 +56,6 @@ SSE =                # The SSE options to be used to compile.  If blank,
 
 COVERAGE =           # Add the code coverage compile options.
 
-USE_R4 =             # If non-blank, use R4 for reals
-
 # Need to use at least GNU Make version 3.81
 need := 3.81
 ok := $(filter $(need),$(firstword $(sort $(MAKE_VERSION) $(need))))
@@ -77,12 +77,7 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-ifdef USE_R4
-REAL_PRECISION := -fdefault-real-4
-CPPDEFS += -DOVERLOAD_R4
-else
-REAL_PRECISION := -fdefault-real-8
-endif
+MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
@@ -96,7 +91,7 @@ FPPFLAGS := $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fcray-pointer -fdefault-double-8 $(REAL_PRECISION) -Waliasing -ffree-line-length-none -fno-range-check
+FFLAGS := -fcray-pointer -fdefault-double-8 -fdefault-real-8 -Waliasing -ffree-line-length-none -fno-range-check
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O3

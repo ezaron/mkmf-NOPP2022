@@ -1,14 +1,18 @@
-# Template for the Intel Compilers on Linux systems
+# Template for the GNU Compiler Collection on a Cray System
 #
 # Typical use with mkmf
-# mkmf -t linux-intel.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
+# mkmf -t ncrc-cray.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
 
 ############
-# Command Macros
-FC = ifort
-CC = icc
-CXX = icpc
-LD = ifort
+# Commands Macros
+############
+FC = ftn
+CC = cc
+LD = ftn $(MAIN_PROGRAM)
+
+#FC = mpifort
+#CC = mpicc
+#LD = mpifort $(MAIN_PROGRAM)
 
 #######################
 # Build target macros
@@ -38,20 +42,13 @@ VERBOSE =            # If non-blank, add additional verbosity compiler
 
 OPENMP =             # If non-blank, compile with openmp enabled
 
-NO_OVERRIDE_LIMITS = # If non-blank, do not use the -qoverride-limits
-                     # compiler option.  Default behavior is to compile
-                     # with -qoverride-limits.
-
 NETCDF =             # If value is '3' and CPPDEFS contains
                      # '-Duse_netCDF', then the additional cpp macro
                      # '-Duse_LARGEFILE' is added to the CPPDEFS macro.
 
-INCLUDES =           # A list of -I Include directories to be added to the
+                     # A list of -I Include directories to be added to the
                      # the compile command.
-
-SSE = -xsse2         # The SSE options to be used to compile.  If blank,
-                     # than use the default SSE settings for the host.
-                     # Current default is to use SSE2.
+INCLUDES := $(shell pkg-config --cflags yaml-0.1)
 
 COVERAGE =           # Add the code coverage compile options.
 
@@ -76,72 +73,62 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
-
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
 
 # Additional Preprocessor Macros needed due to  Autotools and CMake
-CPPDEFS += -DHAVE_SCHED_GETAFFINITY
+CPPDEFS += -DHAVE_SCHED_GETAFFINITY -DHAVE_GETTID
 
 # Macro for Fortran preprocessor
-FPPFLAGS = -fpp -Wp,-w $(INCLUDES)
+FPPFLAGS := $(INCLUDES)
 # Fortran Compiler flags for the NetCDF library
-FFPPLAGS += $(shell nf-config --fflags)
-# Fortran Compiler flags for the MPICH MPI library
-FFPPLAGS += $(shell pkg-config --cflags-only-I mpich2-c)
+FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fno-alias -stack_temps -safe_cray_ptr -ftz -assume byterecl -i4 -r8 -nowarn -g -sox -traceback
+FFLAGS := -g -fbacktrace -fcray-pointer -fdefault-real-8 -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check -fallow-argument-mismatch \
+  -fallow-invalid-boz
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-FFLAGS_OPT = -O2
-FFLAGS_REPRO = -fpmodel source -O2
-FFLAGS_DEBUG = -O0 -check -check noarg_temp_created -check nopointer -warn -warn noerrors -debug variable_locations -fpe0 -ftrapuv
+FFLAGS_OPT = -O2 -fno-expensive-optimizations
+FFLAGS_REPRO =
+FFLAGS_DEBUG = -O0 -W -fbounds-check -ffpe-trap=invalid,zero,overflow
 
 # Flags to add additional build options
-FFLAGS_OPENMP = -qopenmp
-FFLAGS_OVERRIDE_LIMITS = -qoverride-limits
-FFLAGS_VERBOSE = -v -V -what -warn all
-FFLAGS_COVERAGE = -prof-gen=srcpos
+FFLAGS_OPENMP = -fopenmp
+FFLAGS_VERBOSE = -Wall -Wextra
+FFLAGS_COVERAGE =
 
 # Macro for C preprocessor
-CPPFLAGS = -D__IFC $(INCLUDES)
+CPPFLAGS := -D__IFC $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
-# C Compiler flags for the MPICH MPI library
-CPPFLAGS += $(shell pkg-config --cflags-only-I mpich2-c)
 
 # Base set of C compiler flags
-CFLAGS := -sox -traceback
+CFLAGS :=
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 CFLAGS_OPT = -O2
 CFLAGS_REPRO = -O2
-CFLAGS_DEBUG = -O0 -g -ftrapuv
+CFLAGS_DEBUG = -O0 -g
 
 # Flags to add additional build options
-CFLAGS_OPENMP = -qopenmp
-CFLAGS_VERBOSE = -w3
-CFLAGS_COVERAGE = -prof-gen=srcpos
+CFLAGS_OPENMP = -fopenmp
+CFLAGS_VERBOSE = -Wall -Wextra
+CFLAGS_COVERAGE =
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
 # *_TEST will match the production if no new option(s) is(are) to be tested.
-FFLAGS_TEST = $(FFLAGS_OPT)
-CFLAGS_TEST = $(CFLAGS_OPT)
+FFLAGS_TEST := $(FFLAGS_OPT)
+CFLAGS_TEST := $(CFLAGS_OPT)
 
 # Linking flags
 LDFLAGS :=
-LDFLAGS_OPENMP := -qopenmp
-LDFLAGS_VERBOSE := -Wl,-V,--verbose,-cref,-M
-LDFLAGS_COVERAGE = -prof-gen=srcpos
+LDFLAGS_OPENMP := -fopenmp
+LDFLAGS_VERBOSE :=
+LDFLAGS_COVERAGE :=
 
-# Start with a blank LIBS
-LIBS =
-# NetCDF library flags
-LIBS += $(shell nf-config --flibs)
-# MPICH MPI library flags
-$(shell pkg-config --libs mpich2-f90)
+# List of -L library directories to be added to the compile and linking commands
+LIBS := $(shell pkg-config --libs yaml-0.1)
 
 # Get compile flags based on target macros.
 ifdef REPRO
@@ -164,15 +151,6 @@ FFLAGS += $(FFLAGS_OPENMP)
 LDFLAGS += $(LDFLAGS_OPENMP)
 endif
 
-ifdef SSE
-CFLAGS += $(SSE)
-FFLAGS += $(SSE)
-endif
-
-ifdef NO_OVERRIDE_LIMITS
-FFLAGS += $(FFLAGS_OVERRIDE_LIMITS)
-endif
-
 ifdef VERBOSE
 CFLAGS += $(CFLAGS_VERBOSE)
 FFLAGS += $(FFLAGS_VERBOSE)
@@ -181,9 +159,7 @@ endif
 
 ifeq ($(NETCDF),3)
   # add the use_LARGEFILE cppdef
-  ifneq ($(findstring -Duse_netCDF,$(CPPDEFS)),)
-    CPPDEFS += -Duse_LARGEFILE
-  endif
+  CPPDEFS += -Duse_LARGEFILE
 endif
 
 ifdef COVERAGE
@@ -206,13 +182,13 @@ LDFLAGS += $(LIBS)
 # .f, .f90, .F, .F90. Given a sourcefile <file>.<ext>, where <ext> is one of
 # the above, this provides a number of default actions:
 
-# make <file>.opt	create an optimization report
-# make <file>.o		create an object file
-# make <file>.s		create an assembly listing
-# make <file>.x		create an executable file, assuming standalone
-#			source
-# make <file>.i		create a preprocessed file (for .F)
-# make <file>.i90	create a preprocessed file (for .F90)
+# make <file>.opt       create an optimization report
+# make <file>.o         create an object file
+# make <file>.s         create an assembly listing
+# make <file>.x         create an executable file, assuming standalone
+#                       source
+# make <file>.i         create a preprocessed file (for .F)
+# make <file>.i90       create a preprocessed file (for .F90)
 
 # The macro TMPFILES is provided to slate files like the above for removal.
 

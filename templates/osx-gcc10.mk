@@ -1,14 +1,14 @@
-# Template for the Intel Compilers on Linux systems
+# Template for the GNU Compiler Collection on OSX systems
 #
 # Typical use with mkmf
-# mkmf -t linux-intel.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
+# mkmf -t osx-gnu.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
 
 ############
-# Command Macros
-FC = ifort
-CC = icc
-CXX = icpc
-LD = ifort
+# Commands Macros
+FC = mpif90
+CC = mpicc
+CXX = mpicxx
+LD = mpif90 $(MAIN_PROGRAM)
 
 #######################
 # Build target macros
@@ -49,7 +49,7 @@ NETCDF =             # If value is '3' and CPPDEFS contains
 INCLUDES =           # A list of -I Include directories to be added to the
                      # the compile command.
 
-SSE = -xsse2         # The SSE options to be used to compile.  If blank,
+SSE =                # The SSE options to be used to compile.  If blank,
                      # than use the default SSE settings for the host.
                      # Current default is to use SSE2.
 
@@ -76,54 +76,56 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
+# Get number of CPUs
+MAKEFLAGS += --jobs=$(shell sysctl -n hw.ncpu)
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
+CPPDEFS += -DHAVE_GETTID
 
 # Additional Preprocessor Macros needed due to  Autotools and CMake
-CPPDEFS += -DHAVE_SCHED_GETAFFINITY
 
 # Macro for Fortran preprocessor
-FPPFLAGS = -fpp -Wp,-w $(INCLUDES)
+FPPFLAGS := $(INCLUDES)
+
+# Add -D__APPLE__ for Fortran if on OSX (i.e. Darwin)
+ifeq ($(shell uname -s),Darwin)
+FPPFLAGS += -D__APPLE__
+endif
+
 # Fortran Compiler flags for the NetCDF library
-FFPPLAGS += $(shell nf-config --fflags)
-# Fortran Compiler flags for the MPICH MPI library
-FFPPLAGS += $(shell pkg-config --cflags-only-I mpich2-c)
+FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fno-alias -stack_temps -safe_cray_ptr -ftz -assume byterecl -i4 -r8 -nowarn -g -sox -traceback
+FFLAGS := -fcray-pointer -fdefault-double-8 -fdefault-real-8 -Waliasing -ffree-line-length-none -fno-range-check -fallow-invalid-boz -fallow-argument-mismatch
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-FFLAGS_OPT = -O2
-FFLAGS_REPRO = -fpmodel source -O2
-FFLAGS_DEBUG = -O0 -check -check noarg_temp_created -check nopointer -warn -warn noerrors -debug variable_locations -fpe0 -ftrapuv
+FFLAGS_OPT = -O3
+FFLAGS_REPRO = -O2 -fbounds-check
+FFLAGS_DEBUG = -O0 -g -W -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
 
 # Flags to add additional build options
-FFLAGS_OPENMP = -qopenmp
-FFLAGS_OVERRIDE_LIMITS = -qoverride-limits
-FFLAGS_VERBOSE = -v -V -what -warn all
-FFLAGS_COVERAGE = -prof-gen=srcpos
+FFLAGS_OPENMP = -fopenmp
+FFLAGS_VERBOSE =
+FFLAGS_COVERAGE =
 
 # Macro for C preprocessor
-CPPFLAGS = -D__IFC $(INCLUDES)
+CPPFLAGS = $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
-# C Compiler flags for the MPICH MPI library
-CPPFLAGS += $(shell pkg-config --cflags-only-I mpich2-c)
 
 # Base set of C compiler flags
-CFLAGS := -sox -traceback
+CFLAGS := -D__IFC
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 CFLAGS_OPT = -O2
 CFLAGS_REPRO = -O2
-CFLAGS_DEBUG = -O0 -g -ftrapuv
+CFLAGS_DEBUG = -O0 -g
 
 # Flags to add additional build options
-CFLAGS_OPENMP = -qopenmp
-CFLAGS_VERBOSE = -w3
-CFLAGS_COVERAGE = -prof-gen=srcpos
+CFLAGS_OPENMP = -fopenmp
+CFLAGS_VERBOSE =
+CFLAGS_COVERAGE =
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
 # *_TEST will match the production if no new option(s) is(are) to be tested.
@@ -132,16 +134,16 @@ CFLAGS_TEST = $(CFLAGS_OPT)
 
 # Linking flags
 LDFLAGS :=
-LDFLAGS_OPENMP := -qopenmp
-LDFLAGS_VERBOSE := -Wl,-V,--verbose,-cref,-M
-LDFLAGS_COVERAGE = -prof-gen=srcpos
+LDFLAGS_OPENMP := -fopenmp
+LDFLAGS_VERBOSE :=
+LDFLAGS_COVERAGE :=
 
 # Start with a blank LIBS
 LIBS =
 # NetCDF library flags
 LIBS += $(shell nf-config --flibs)
-# MPICH MPI library flags
-$(shell pkg-config --libs mpich2-f90)
+# netCDF C library flags, in case installed in a separate directory
+LIBS += $(shell nc-config --libs)
 
 # Get compile flags based on target macros.
 ifdef REPRO
